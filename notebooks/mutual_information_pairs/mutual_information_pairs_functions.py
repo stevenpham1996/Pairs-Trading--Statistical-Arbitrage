@@ -29,7 +29,7 @@ import yfinance as yf
 import matplotlib.dates as mdates
 from arch.unitroot import DFGLS, PhillipsPerron, KPSS, VarianceRatio, ADF
 from arch import arch_model   
-from arch.univariate import HARX, StudentsT, FIGARCH
+from arch.univariate import HARX, StudentsT
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -136,8 +136,8 @@ def formation_crypto(data:pd.DataFrame, top_pctile=0.9, use_num=False, num_pairs
             best_models.append(best_model)
     if len(best_pairs) > 0 and len(best_models) > 0 and len(best_pairs) == len(best_models):
         print("#########################################################")
-        print(f"Formation Period: {data.index[0]} - {data.index[-1]}")
-        print(f"\nFound {len(best_pairs)} pairs: \n{best_pairs}")
+        print(f"\nFormation Period: {data.index[0]} - {data.index[-1]}")
+        print(f"\nFound {len(best_pairs)} pairs: \n{best_pairs}\n")
         print("#########################################################")
         return best_pairs, best_models
     else:
@@ -263,18 +263,17 @@ def plot_cv_model_degrees(cv_models):
     ax.set_xticks(unique_degrees)
     fig.tight_layout()
 
-def calc_hurst(norm_spread):
+
+def calc_hurst(norm_spread: pd.Series):
     """
     Calculates Hurst exponent.
     https://en.wikipedia.org/wiki/Hurst_exponent
-
-    :param norm_spread: An array like object used to calculate half-life.
     """
     # Create the range of lag values
     lags = range(2, 100)
 
     # Calculate the array of the variances of the lagged differences
-    diffs = [np.subtract(norm_spread[l:], norm_spread[:-l]) for l in lags]
+    diffs = [np.subtract(norm_spread.values[l:], norm_spread.values[:-l]) for l in lags]
     tau = [np.sqrt(np.std(diff)) for diff in diffs]
 
     # Use a linear fit to estimate the Hurst Exponent
@@ -285,22 +284,22 @@ def calc_hurst(norm_spread):
 
     return H
 
-def calc_half_life(norm_spread):
+def calc_half_life(norm_spread: pd.Series):
     """
     Calculates time series half-life.
     https://en.wikipedia.org/wiki/Half-life
 
-    :param norm_spread: An array like object used to calculate half-life.
+    :param norm_spread: A pandas-Series object used to calculate half-life.
     """
-    lag = norm_spread.shift(1)
+    lag = np.roll(norm_spread.values, 1)
     lag[0] = lag[1]
 
-    ret = norm_spread - lag
+    ret = norm_spread.values - lag
     lag = sm.add_constant(lag)
 
     model = sm.OLS(ret, lag)
     result = model.fit()
-    half_life = -np.log(2)/result.params.iloc[1]
+    half_life = -np.log(2)/result.params[1]
 
     return half_life
 
@@ -743,26 +742,14 @@ def select_pairs(pairs, log_prices, use_num=False, num_pairs=10, top_pctile=0.9)
         temp = mutualInfo(security_0, security_1, True)
         if temp is not None:
             mutual_info_list.append(temp)
-    # asc-sort pairs by mutual information scores
+    # asc-sort pairs by mutual information
     temp_pairs = [pairs[i] for i in np.argsort(mutual_info_list)]
-    # remove the lower mutualinfo-score pairs that
-    # have one element overlapping with the higher mutualinfo-score pairs
-    new_pairs = []
-    for i, pair in enumerate(temp_pairs[:-1]):
-        overlap = False
-        for j in range(i+1, len(temp_pairs)):
-            if pair[0] in temp_pairs[j] or pair[1] in temp_pairs[j]:
-                overlap = True
-                break
-        if overlap == False:
-            new_pairs.append(temp_pairs[i+1])
-    new_pairs.append(temp_pairs[-1]) # add the last pair
-    # get the top 0.9 percentile of pairs
-    best_pairs = new_pairs[int(len(new_pairs) * top_pctile):]
     # if use_num is True, return the top num_pairs pairs
     if use_num:
         best_pairs = temp_pairs[-num_pairs:]
-    
+    else:
+        # get the top 0.9 percentile of pairs
+        best_pairs = temp_pairs[int(len(temp_pairs) * top_pctile):]
     return best_pairs
 
 
@@ -848,7 +835,7 @@ def backtest_stock(S1:pd.Series, S2:pd.Series, train_spread, test_spread, fee=0.
     
     pair_res = pd.Series(index=test_spread.index)
     
-    train_window = 252*3
+    train_window = 252*2
     
     ret1 = S1.pct_change()
     ret2 = S2.pct_change()
@@ -930,15 +917,14 @@ def is_stationary_crypto(norm_spread, significance_level=0.05) -> bool:
     Phillips Perron: Null hypothesis that a time series is integrated of order 1
     Lo-Mackinlay Variance Ratio: Null hypothesis that norm_spread follows a random walk
     Kwiatkowski Phillips Schmidt Shin: Null hypothesis that the time series is stationary"""
-    # test_dict = {'GLS-detrended-Dickey-Fuller': DFGLS, 'Phillips-Perron': PhillipsPerron,
-    #             'Variance-Ratio': VarianceRatio, 'KPSS': KPSS} 
-    # p_values = []
-    # for test in test_dict.keys():
-    #     p_values.append(test_dict[test](norm_spread.values).pvalue)
+    test_dict = {'GLS-detrended-Dickey-Fuller': DFGLS, 'Phillips-Perron': PhillipsPerron,
+                'Variance-Ratio': VarianceRatio, 'KPSS': KPSS} 
+    p_values = []
+    for test in test_dict.keys():
+        p_values.append(test_dict[test](norm_spread.values).pvalue)
         
     # if all tests indicate stationary, return True
-    # if all([p < significance_level for p in p_values[:3]]) & (p_values[3] > significance_level):
-    if ADF(norm_spread.values).pvalue < significance_level:
+    if all([p < significance_level for p in p_values[:3]]) & (p_values[3] > significance_level):
         return True
     else:
         return False
@@ -970,7 +956,6 @@ def backtest_crypto(S1:pd.Series, S2:pd.Series, train_spread, test_spread, fee=0
         
         model = arch_model(trade_data, rescale=False)
         model.distribution = StudentsT(seed=42)
-        model.volatility = FIGARCH(p=1, q=1, power=1.99)
         model.mean = HARX(trade_data[1:], trade_data[:-1].values.reshape(-1, 1), lags=1)
         model_fit = model.fit(disp='off')
         vol = model_fit.conditional_volatility.iloc[-1]
