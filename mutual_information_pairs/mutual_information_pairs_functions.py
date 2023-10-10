@@ -153,25 +153,58 @@ def convertString(string):
 
 ### Lopez de Prado Machine Learning for Asset Management
 
-def numBins(nObs,corr=None):
+def numBins(n_Obs, corr=None): 
+    """
+    Calculates the optimal number of bins for discretization based on the number of observations and correlation.
+
+    Parameters:
+        n_Obs (int): The number of observations.
+        corr (float, optional): The correlation between variables. Defaults to None.
+
+    Returns:
+        int: The optimal number of bins for discretization.
+    """
+    if np.isnan(n_Obs):
+        return None
     # Optimal number of bins for discretization 
     if corr is None: # univariate case
-        z=(8+324*nObs+12*(36*nObs+729*nObs**2)**.5)**(1/3.)
+        z=(8+324*n_Obs+12*(36*n_Obs+729*n_Obs**2)**.5)**(1/3.)
         b=round(z/6.+2./(3*z)+1./3) 
     else: # bivariate case
-        b=round(2**-.5*(1+(1+24*nObs/(1.-corr**2))**.5)**.5)
+        b=round(2**-.5*(1+(1+24*n_Obs/(1.-corr**2))**.5)**.5)          
     return int(b)
 
+
 def mutualInfo(x,y,norm=False):
-    # mutual information
-    bXY=numBins(x.shape[0], corr=np.corrcoef(x,y)[0,1])
-    cXY=np.histogram2d(x,y,bXY)[0]
-    iXY=mutual_info_score(None,None,contingency=cXY)
-    if norm:
-        hX=ss.entropy(np.histogram(x,bXY)[0]) # marginal 
-        hY=ss.entropy(np.histogram(y,bXY)[0]) # marginal 
-        iXY/=min(hX,hY) # normalized mutual information
-    return iXY
+    """
+    Calculate the mutual information between two arrays, x and y.
+
+    Parameters:
+        x (ndarray): The first input array.
+        y (ndarray): The second input array.
+        norm (bool, optional): If True, normalize the mutual information by the minimum entropy of x and y. Defaults to False.
+
+    Returns:
+        float: The mutual information between x and y. If the shapes of x and y are not equal, returns None.
+    """
+    # check if x and y have the same shape
+    if np.shape(x) != np.shape(y):
+        return None
+    else:
+        # mutual information
+        bXY=numBins(x.shape[0], corr=np.corrcoef(x,y)[0,1])
+        if bXY is None:
+            return None
+        cXY=np.histogram2d(x,y,bXY)[0]
+        iXY=mutual_info_score(None,None,contingency=cXY)
+        if norm:
+            # The relative entropy, D(pk|qk)
+            hX=ss.entropy(np.histogram(x,bXY)[0]) # marginal 
+            hY=ss.entropy(np.histogram(y,bXY)[0]) # marginal 
+            # normalized mutual information
+            iXY/=min(hX,hY) 
+            
+        return iXY
 
 def calculate_mutual_information(pairs, pairs_list, prices):
     mutual_info_list = []
