@@ -1,0 +1,17 @@
+comm
+numpy
+pandas
+scipy
+statsmodels
+ccxt
+python-dotenv
+arch
+schedule
+scikit-learn
+matplotlib
+seaborn
+stochastic
+numba
+yfinance
+python-binance
+PyTickerSymbols
