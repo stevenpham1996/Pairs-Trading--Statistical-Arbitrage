@@ -279,8 +279,8 @@ class OpticsPairs:
     def filter_pairs(self,
                      max_pvalue: float = 0.01,
                      max_hurst_exp: float = 0.5,
-                     max_half_life: float = 63.0,
-                     min_half_life: float = 10.0,
+                     max_half_life: float = 252.0,
+                     min_half_life: float = 1.0,
                      min_avg_cross: float = 12.0):
         """
         Generates a summary dataframe of potential pairs containing:
@@ -292,7 +292,7 @@ class OpticsPairs:
         specified criteria.
 
         :param max_pvalue: A floating number to eliminate potential pairs with
-            Phillips-Ouliaris t-stat pvalues above max_pvalue. Default set to 5%.
+            Phillips-Ouliaris t-stat pvalues above max_pvalue. Default set to 1%.
         :param max_hurst_exp: A floating number to eliminate potential
             pairs with Hurst exponents greater than max_hurst_exp.
             Values below 0.5 represent mean-reverting pairs.
@@ -340,7 +340,7 @@ class OpticsPairs:
                             'hurst_exp',
                             'half_life',
                             'avg_cross_count']
-
+         
         # Find pairs that meet user defined criteria
         filtered_pairs = pairs_df.loc[
             # Significant Phillips-Ouliaris test AND
@@ -349,21 +349,31 @@ class OpticsPairs:
             (pairs_df['hurst_exp'] < max_hurst_exp) &
             # Half-life above minimum value AND
             # Half-life below maximum value AND
-            ((pairs_df['half_life'] >= min_half_life) &
-             (pairs_df['half_life'] <= max_half_life)) &
+            ((pairs_df['half_life'] > min_half_life) &
+             (pairs_df['half_life'] < max_half_life)) &
             # Produces sufficient number of trading opportunities
             (pairs_df['avg_cross_count'] >= min_avg_cross)]
 
         self.pairs_df = pairs_df
+        
         # remove filtered_pairs['pair'] where there are overlapping securities
-        # keep the pair with the smaller max_hurst_exp
-        for i in range(len(filtered_pairs)):
-            for j in range(len(filtered_pairs)):
-                if filtered_pairs.iloc[i]["pair"] == filtered_pairs.iloc[j]["pair"]:
-                    if filtered_pairs.iloc[i]["hurst_exp"] > filtered_pairs.iloc[j]["hurst_exp"]:
-                        filtered_pairs = filtered_pairs.drop(i)
-                    elif filtered_pairs.iloc[i]["hurst_exp"] < filtered_pairs.iloc[j]["hurst_exp"]:
-                        filtered_pairs = filtered_pairs.drop(j)
+        # keep the pairs with the smaller hurst_exp
+        index = list(filtered_pairs.index)
+        for i in index[:-1]:
+            for j in index[1:]:
+                try:
+                    pair_0 = filtered_pairs.loc[i]['pair']
+                    pair_1 = filtered_pairs.loc[j]['pair']
+                    if pair_0[0] in pair_1 or pair_0[1] in pair_1:
+                        if filtered_pairs.loc[i]['hurst_exp'] > filtered_pairs.loc[j]['hurst_exp']:
+                            filtered_pairs = filtered_pairs.drop(i)
+                        elif filtered_pairs.loc[i]['hurst_exp'] < filtered_pairs.loc[j]['hurst_exp']:
+                            filtered_pairs = filtered_pairs.drop(j)
+                        else:
+                            continue
+                except:
+                    continue            
+        
         self.filtered_pairs = filtered_pairs
 
         if len(self.filtered_pairs) == 0:
@@ -592,7 +602,7 @@ S1:pd.Series, S2:pd.Series, train_spread, test_spread, thrsLow, thrsHigh, beta, 
     
     pair_res = pd.Series(index=test_spread.index)
     
-    train_window = 252 * 12
+    train_window = 252 * 5
 
     spread_pctchanges = test_spread.pct_change()
         
