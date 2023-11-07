@@ -9,9 +9,12 @@ arch
 schedule
 scikit-learn
 matplotlib
+plotly
+nbformat
 seaborn
 stochastic
 numba
+pandas-datareader
 yfinance
 python-binance
 PyTickerSymbols
