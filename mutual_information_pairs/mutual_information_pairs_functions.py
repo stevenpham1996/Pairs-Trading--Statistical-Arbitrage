@@ -36,7 +36,6 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 # https://austinrochford.com/posts/2013-12-12-polynomial-regression-cross-validation.html
-
 class PolynomialRegression(BaseEstimator):
     def __init__(self, deg=None):
         self.deg = deg
